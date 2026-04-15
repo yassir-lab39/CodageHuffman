@@ -1,0 +1,483 @@
+\documentclass[12pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[french]{babel}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{geometry}
+\usepackage{listings}
+\usepackage[linesnumbered,ruled,vlined]{algorithm2e}
+\usepackage{amsmath}
+\geometry{margin=2.5cm}
+
+\title{Codage de Huffman}
+\author{Yassir Chakir et Anas Sabir\
+\textit{Équipe EF07, Sciences du Numérique, 2024-2025}}
+\date{}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+Ce rapport vise à présenter la méthode adoptée pour résoudre divers problèmes rencontrés au cours de ce projet. En particulier, il traite de la représentation de l'arbre de Huffman et de sa table, ainsi que de la vérification de la possibilité de coder tous les caractères en moins d'un octet. Il détaille également la manière dont les codes des caractères sont représentés. Tout au long du document, nous explorerons la conception des algorithmes utilisés, les choix techniques effectués, et la démarche mise en œuvre. Le rapport se conclut par un bilan technique et une réflexion personnelle.
+\end{abstract}
+
+\section{Introduction}
+Le codage de Huffman est une méthode de compression sans perte qui réduit efficacement la taille des fichiers en assignant des codes binaires de longueur variable en fonction des fréquences des caractères. Ce projet a pour objectif de développer une application capable de compresser un fichier texte tout en conservant la possibilité de le décompresser ultérieurement.
+
+\section{Architecture modulaire}
+Le programme est structuré autour de plusieurs modules clés interconnectés pour assurer la compression et la décompression efficaces des fichiers.
+
+\begin{itemize}
+    \item \textbf{Module Compresser :} 
+    \begin{itemize}
+        \item Gère les entrées de la ligne de commande.
+        \item Effectue le calcul des fréquences des caractères, la construction de l'arbre de Huffman, le calcul des codes binaires, et l'encodage du fichier source.
+        \item Affiche les informations supplémentaires en mode bavard.
+    \end{itemize}
+    
+    \item \textbf{Module Arbre Binaire :} 
+    \begin{itemize}
+        \item Gère la construction et la manipulation de l'arbre de Huffman, essentiel pour la génération des codes binaires en fonction des fréquences des caractères.
+    \end{itemize}
+    
+    \item \textbf{Module Décompresser :} 
+    \begin{itemize}
+        \item Gère les entrées de la ligne de commande.
+        \item Effectue la récupération des caractères utilisés, du parcours infixe, et des codes des caractères pour décoder le fichier compressé.
+    \end{itemize}
+\end{itemize}
+
+Ces modules collaborent pour garantir une compression efficace des données et une décompression précise, assurant ainsi la traçabilité et l'intégrité des informations.
+
+
+\section{Principaux choix réalisés}
+\begin{itemize}
+    \item \textbf{Représentation de l'arbre :} Utilisation d'un arbre binaire parfait pour stocker les fréquences des caractères et leurs codes.
+    \item \textbf{Constructions des noeuds sans tri séparé :} Plutôt que d'utiliser un module de tri séparé, nous avons choisi de trouver directement les deux plus petites fréquences et de les permuter avec les deux derniers symboles. Cette méthode réduit considérablement la complexité tout en assurant la construction correcte de l'arbre de Huffman.
+    
+    \item \textbf{Format des fichiers compressés :} Intégration des métadonnées : liste des symboles utilisés et la signature de l'arbre en octet en début de fichier, suivies du texte d'origine après compression en octets pour permettre la décompression.
+    
+    \item \textbf{Gestion des données binaires :} Les codes sont regroupés par blocs de 8 bits pour être enregistrés sous forme d'octets.
+    \item \textbf{Stockage des caractères pour la décompression :} Un tableau est utilisé pour conserver les caractères employés dans le codage. Cela permet de garantir l'ordre d'apparition des caractères lors du parcours infixe de l'arbre.
+    \item \textbf{Utilisation d'un \texttt{Unbounded\_String} :} Pour stocker le parcours infixe du fichier compressé, un \texttt{Unbounded\_String} est utilisé. Ce type de donnée est particulièrement pratique pour la manipulation, car il permet de stocker dynamiquement les octets lus séquentiellement, rendant le processus de décompression plus fluide.
+\end{itemize}
+
+\section{Algorithmes}
+
+\subsection{Construction de l'arbre de Huffman}
+L'arbre est construit en fusionnant les deux nœuds ayant les fréquences les plus faibles. Ce processus est répété jusqu'à obtenir un seul arbre racine.
+
+\begin{algorithm}
+    \caption{Construction de l'arbre de Huffman}
+    \KwIn{Table des Noeuds de l'arbre}
+    \KwOut{Racine de l'arbre de Huffman}
+    \While{la taille de la table des noeuds contient plus d'un élément}{
+        Permuter les deux derniers éléments de la table avec les deux éléments ayant les plus petites fréquences\;
+        Fusionner les deux éléments ayant les plus petites fréquences\;
+        Créer un nouveau nœud avec une fréquence égale à la somme des fréquences des deux éléments fusionnés\;
+        Remplacer ces deux éléments par le nouveau nœud dans la table\;
+        Réduire la taille de la table des fréquences d'un élément\;
+    }
+\end{algorithm}
+    
+\subsection{Codage de chaque symbole à partir de l'arbre de Huffman}
+L'algorithme suivant traverse l'arbre de Huffman pour générer le code binaire de chaque symbole. Chaque feuille de l'arbre correspond à un symbole, et le chemin vers cette feuille détermine son code binaire.
+
+\begin{algorithm}
+    \caption{Codage des symboles à partir de l'arbre de Huffman}
+    \KwIn{Arbre de Huffman, code\_courant, Tableau des codes (Tableau\_Octet)}
+    \KwOut{Tableau des codes avec chaque symbole et son code binaire}
+    
+    \SetKwFunction{FCode}{Codage}
+    \SetKwProg{Fn}{Procédure}{ :}{}
+    
+    \Fn{\FCode{Arbre, code\_courant, Tableau\_Octet}}{
+        \uIf{Arbre.Sous\_Arbre\_Gauche = null \textbf{et} Arbre.Sous\_Arbre\_Droit = null}{
+            Ajouter le symbole de la feuille et son code\_courant dans Tableau\_Octet\;
+        }
+        \If{Arbre.Sous\_Arbre\_Gauche $\neq$ null}{
+            Appeler \FCode{Arbre.Sous\_Arbre\_Gauche, code\_courant + "0", Tableau\_Octet}\;
+        }
+        \If{Arbre.Sous\_Arbre\_Droit $\neq$ null}{
+            Appeler \FCode{Arbre.Sous\_Arbre\_Droit, code\_courant + "1", Tableau\_Octet}\;
+        }
+    }
+\end{algorithm}
+
+\subsection{Parcours infixe de l'arbre pour créer le code de l'arbre et la liste des symboles en octets}
+L'algorithme ci-dessous effectue un parcours infixe de l'arbre de Huffman pour générer le code de l'arbre et remplir une liste des symboles encodés en octets.
+
+\begin{algorithm}
+    \caption{Parcours infixe de l'arbre pour le codage et la liste des symboles}
+    \KwIn{Arbre de Huffman, Code\_arbre, Tableau des symboles (TabDesSymboles)}
+    \KwOut{Code de l'arbre, Liste des symboles en octets}
+    
+    \SetKwFunction{FParcours}{Parcours\_Infixe}
+    \SetKwProg{Fn}{Procédure}{ :}{}
+    
+    \Fn{\FParcours{Arbre, Code\_arbre, TabDesSymboles}}{
+        \If{Arbre.Sous\_Arbre\_Gauche $\neq$ null}{
+            Code\_arbre $\leftarrow$ Code\_arbre + "0"\;
+            Appeler \FParcours{Arbre.Sous\_Arbre\_Gauche, Code\_arbre, TabDesSymboles}\;
+        }
+        \If{Arbre.Sous\_Arbre\_Droit $\neq$ null}{
+            Code\_arbre $\leftarrow$ Code\_arbre + "1"\;
+            Appeler \FParcours{Arbre.Sous\_Arbre\_Droit, Code\_arbre, TabDesSymboles}\;
+        }
+        \uIf{Arbre.Sous\_Arbre\_Gauche = null \textbf{et} Arbre.Sous\_Arbre\_Droit = null \textbf{et} Arbre.Cle $\neq$ "\$"}{
+            Incrémenter la taille de TabDesSymboles\;
+            Ajouter le symbole correspondant à Arbre.Cle dans TabDesSymboles\;
+        }
+        \If{Arbre.Cle = "\$"}{
+            Incrémenter la taille de TabDesSymboles\;
+            Ajouter -1 dans TabDesSymboles\;
+        }
+    }
+\end{algorithm}
+
+\subsection{Création du fichier \texttt{File\_Name.hff}}
+L'algorithme suivant permet de créer un fichier compressé à partir de l'arbre de Huffman et des symboles encodés.
+
+\begin{algorithm}
+    \caption{Création du fichier \texttt{File\_Name.hff}}
+    \KwIn{Nom du fichier (\texttt{File\_Name}), Tableau des symboles (\texttt{TabDesSymboles}), Tableau des octets (\texttt{Tableau\_Octet}), Taille (\texttt{Size}), Code de l'arbre (\texttt{Code\_arbre})}
+    \KwOut{Fichier compressé \texttt{File\_Name.hff}}
+    
+    \SetKwFunction{FCreation}{Creation}
+    \SetKwProg{Fn}{Procédure}{ :}{}
+    
+    \Fn{\FCreation{File\_Name, TabDesSymboles, Tableau\_Octet, Size, Code\_arbre}}{
+        Créer le fichier \texttt{File\_Name.hff} en mode sortie\;
+        Initialiser le flux de sortie \texttt{S}\;
+        \texttt{S1} $\leftarrow$ Affichage du texte à partir de \texttt{Tableau\_Octet} et \texttt{Size}\;
+        \texttt{S2} $\leftarrow$ \texttt{Code\_arbre} + "1"\;
+        
+        \For{chaque symbole dans \texttt{TabDesSymboles}}{
+            Écrire le symbole en octet dans le flux \texttt{S}\;
+        }
+        
+        Calculer la longueur de \texttt{S2} modulo 8\;
+        \If{le reste $\neq$ 0}{
+            Compléter \texttt{S2} avec des "0" jusqu'à ce que sa longueur soit un multiple de 8\;
+        }
+        
+        \For{chaque groupe de 8 bits dans \texttt{S2}}{
+            Convertir le groupe de bits en octet et l'écrire dans le flux \texttt{S}\;
+        }
+        
+        \For{chaque octet dans \texttt{Tableau\_Octet} correspondant au symbole spécial "\$"}{
+            Ajouter la valeur associée à l'octet à \texttt{S1}\;
+        }
+        
+        Calculer la longueur de \texttt{S1} modulo 8\;
+        \If{le reste $\neq$ 0}{
+            Compléter \texttt{S1} avec des "0" jusqu'à ce que sa longueur soit un multiple de 8\;
+        }
+        
+        \For{chaque groupe de 8 bits dans \texttt{S1}}{
+            Convertir le groupe de bits en octet et l'écrire dans le flux \texttt{S}\;
+        }
+        
+        Fermer le fichier \texttt{File\_Name.hff}\;
+    }
+\end{algorithm}
+
+
+\subsection{Affichage de l'arbre de Huffman}
+L'arbre de Huffman peut être affiché de manière récursive pour visualiser sa structure. La procédure suivante montre comment afficher chaque nœud de l'arbre avec son indice et sa valeur, en utilisant une indentation pour marquer les niveaux de profondeur.
+
+\begin{algorithm}
+    \caption{Affichage de l'arbre de Huffman}
+    \KwIn{Arbre de Huffman}
+    \KwOut{Affichage de l'arbre}
+    \If{l'arbre est vide}{
+        Afficher "L'arbre est vide"\;
+        Retourner\;
+    }
+    Afficher "(" et la valeur du nœud racine\;
+    Afficher\_arbre\_bis(arbre, "", "")\;
+    
+    \textbf{Procédure} afficher\_arbre\_bis(arbre, prefixe, indent) :
+    \If{l'arbre a un sous-arbre gauche}{
+        Afficher "--0--" et la valeur du sous-arbre gauche\;
+        afficher\_arbre\_bis(arbre.sous\_arbre\_gauche, prefixe, indent & "|      ")\;
+    }
+    \If{l'arbre a un sous-arbre droit}{
+        Afficher "--1--" et la valeur du sous-arbre droit\;
+        afficher\_arbre\_bis(arbre.sous\_arbre\_droit, prefixe, indent & "       ")\;
+    }
+\end{algorithm}
+
+\subsection{Conversion d'un Entier en Chaîne de 8 Bits}
+
+La fonction \texttt{OctetTo8Bits} convertit un entier donné en une chaîne de 8 bits, en représentant chaque bit de l'entier sous forme binaire.
+
+\begin{algorithm}
+    \caption{Conversion d'un entier en une chaîne de 8 bits}
+    \KwIn{$n$ : Entier}
+    \KwOut{Chaîne de 8 bits}
+    \SetKwFunction{FOctetTo8Bits}{OctetTo8Bits}
+    \SetKwProg{Fn}{Fonction}{ :}{}
+    \Fn{\FOctetTo8Bits{$n$}}{
+        $S \leftarrow$ Chaîne vide\;
+        $copie \leftarrow n$\;
+        \For{$i \leftarrow 1$ \KwTo $8$}{
+            \If{$copie \geq 2^{8-i}$}{
+                $S \leftarrow S + "1"$\;
+                $copie \leftarrow copie - 2^{8-i}$\;
+            }
+            \Else{
+                $S \leftarrow S + "0"$\;
+            }
+        }
+        \Return{Les 8 premiers caractères de $S$}\;
+    }
+\end{algorithm}
+
+\subsection{Lecture du Fichier Binaire et Extraction des Données}
+
+La procédure \texttt{Lire} lit un fichier binaire donné, extrait un tableau de symboles, et obtient une chaîne contenant le code de l'arbre de Huffman et le texte compressé.
+
+\begin{algorithm}
+    \caption{Lecture du fichier binaire et extraction des données}
+    \KwIn{$File\_Name$ : Nom du fichier binaire}
+    \KwOut{$Tableau$ : Tableau des symboles, $S1$ : Chaîne contenant le code de l'arbre et le texte}
+    \SetKwProg{Proc}{Procédure}{ :}{}
+    \SetKwFunction{FLire}{Lire}
+    \Proc{\FLire{$File\_Name$, $Tableau$, $S1$}}{
+        $nb \leftarrow 1$\;
+        $char\_finish \leftarrow \texttt{faux}$\;
+        Ouvrir le fichier $File\_Name$\;
+        $S \leftarrow$ Flux du fichier\;
+        \While{fin du fichier non atteinte}{
+            $Octet \leftarrow$ Lire un octet à partir de $S$\;
+            \If{$char\_finish = \texttt{faux}$}{
+                $Tableau[nb] \leftarrow$ Entier de $Octet$\;
+                \If{$nb > 1$ \textbf{et} $Tableau[nb] = Tableau[nb-1]$}{
+                    $Tableau[nb] \leftarrow -1$\;
+                    $char\_finish \leftarrow \texttt{vrai}$\;
+                }
+                $nb \leftarrow nb + 1$\;
+            }
+            \If{$char\_finish$}{
+                $S1 \leftarrow S1 + \texttt{OctetTo8Bits}(Octet)$\;
+            }
+        }
+        $S1 \leftarrow$ Sous-chaîne de $S1$ à partir du 9ème caractère jusqu'à la fin\;
+        Fermer le fichier\;
+    }
+\end{algorithm}
+
+\subsection{Extraction des Symboles et Séparation du Code de l'Arbre et du Texte}
+
+La procédure \texttt{extract\_symbols} identifie les codes de chaque symbole à partir de l'arbre de Huffman et sépare le code de l'arbre du texte compressé.
+
+\begin{algorithm}
+    \caption{Extraction des symboles et séparation du code de l'arbre et du texte}
+    \KwIn{$Symbols$ : Tableau des symboles, $S$ : Chaîne contenant le code de l'arbre et le texte, $nb\_chars$ : Nombre de symboles}
+    \KwOut{$code\_chars$ : Tableau des couples (symbole, code Huffman)}
+    \SetKwProg{Proc}{Procédure}{ :}{}
+    \SetKwFunction{FExtractSymbols}{extract\_symbols}
+    \Proc{\FExtractSymbols{$Symbols$, $S$, $code\_chars$, $nb\_chars$}}{
+        $indice\_dollar \leftarrow Symbols[1]$\;
+        $indice\_char \leftarrow 1$\;
+        $indice \leftarrow 1$\;
+        $symbol\_courant \leftarrow \texttt{Unbounded\_String}("")$\;
+        \While{$indice\_char \leq nb\_chars$}{
+            $symbol\_courant \leftarrow symbol\_courant + S[indice]$\;
+            \If{$S[indice+1] = '1'$}{
+                \If{$indice\_char = indice\_dollar$}{
+                    $code\_chars[indice\_char].Cle \leftarrow \texttt{Unbounded\_String}("\$")$\;
+                } \Else{
+                    $s1[1] \leftarrow \texttt{Character'Val}(Symbols[indice\_char])$\;
+                    \If{$indice\_char < indice\_dollar$}{
+                        $s1[1] \leftarrow \texttt{Character'Val}(Symbols[indice\_char+1])$\;
+                    }
+                    $code\_chars[indice\_char].Cle \leftarrow \texttt{Unbounded\_String}(s1)$\;
+                }
+                $code\_chars[indice\_char].Valeur \leftarrow symbol\_courant$\;
+                $indice\_char \leftarrow indice\_char + 1$\;
+                \If{$indice\_char \leq nb\_chars$}{
+                    \While{$symbol\_courant[\texttt{length}(symbol\_courant)] \neq '0'$}{
+                        $symbol\_courant \leftarrow symbol\_courant[1..\texttt{length}(symbol\_courant)-1]$\;
+                    }
+                    $symbol\_courant \leftarrow symbol\_courant[1..\texttt{length}(symbol\_courant)-1]$\;
+                }
+            }
+            $indice \leftarrow indice + 1$\;
+        }
+        \If{$indice \mod 8 \neq 0$}{
+            $indice \leftarrow indice + 8 - (indice \mod 8)$\;
+        }
+        $S \leftarrow S[indice+1..\texttt{length}(S)]$\;
+    }
+\end{algorithm}
+
+\subsection{Extraction des Symboles et Séparation du Code de l'Arbre et du Texte}
+
+La procédure \texttt{extract\_symbols} identifie les codes de chaque symbole à partir de l'arbre de Huffman et sépare le code de l'arbre du texte compressé.
+
+\begin{algorithm}
+    \caption{Extraction des symboles et séparation du code de l'arbre et du texte}
+    \KwIn{$Symbols$ : Tableau des symboles, $S$ : Chaîne contenant le code de l'arbre et le texte, $nb\_chars$ : Nombre de symboles}
+    \KwOut{$code\_chars$ : Tableau des couples (symbole, code Huffman)}
+    \SetKwProg{Proc}{Procédure}{ :}{}
+    \SetKwFunction{FExtractSymbols}{extract\_symbols}
+    \Proc{\FExtractSymbols{$Symbols$, $S$, $code\_chars$, $nb\_chars$}}{
+        $indice\_dollar \leftarrow Symbols[1]$\;
+        $indice\_char \leftarrow 1$\;
+        $indice \leftarrow 1$\;
+        $symbol\_courant \leftarrow \texttt{Unbounded\_String}("")$\;
+        \While{$indice\_char \leq nb\_chars$}{
+            $symbol\_courant \leftarrow symbol\_courant + S[indice]$\;
+            \If{$S[indice+1] = '1'$}{
+                \If{$indice\_char = indice\_dollar$}{
+                    $code\_chars[indice\_char].Cle \leftarrow \texttt{Unbounded\_String}("\$")$\;
+                } \Else{
+                    $s1[1] \leftarrow \texttt{Character'Val}(Symbols[indice\_char])$\;
+                    \If{$indice\_char < indice\_dollar$}{
+                        $s1[1] \leftarrow \texttt{Character'Val}(Symbols[indice\_char+1])$\;
+                    }
+                    $code\_chars[indice\_char].Cle \leftarrow \texttt{Unbounded\_String}(s1)$\;
+                }
+                $code\_chars[indice\_char].Valeur \leftarrow symbol\_courant$\;
+                $indice\_char \leftarrow indice\_char + 1$\;
+                \If{$indice\_char \leq nb\_chars$}{
+                    \While{$symbol\_courant[\texttt{length}(symbol\_courant)] \neq '0'$}{
+                        $symbol\_courant \leftarrow symbol\_courant[1..\texttt{length}(symbol\_courant)-1]$\;
+                    }
+                    $symbol\_courant \leftarrow symbol\_courant[1..\texttt{length}(symbol\_courant)-1]$\;
+                }
+            }
+            $indice \leftarrow indice + 1$\;
+        }
+        \If{$indice \mod 8 \neq 0$}{
+            $indice \leftarrow indice + 8 - (indice \mod 8)$\;
+        }
+        $S \leftarrow S[indice+1..\texttt{length}(S)]$\;
+    }
+\end{algorithm}
+
+\newpage
+
+\section{Types de données}
+Les types utilisés dans l'implémentation sont définis comme suit :
+
+\subsection{Type T\_Element}
+Ce type représente un élément de base, constitué d'un caractère \texttt{Cle} et de sa fréquence d'apparition \texttt{Frequence} dans le texte. Ce type est utilisé pour stocker les informations nécessaires à la construction de l'arbre de Huffman.
+
+\begin{verbatim}
+type T_Element is
+    record
+        Cle : Character;
+        Frequence : Integer;
+    end record;
+\end{verbatim}
+
+
+\subsection{Type T\_Tab}
+Il s'agit d'un tableau de 256 éléments de type \texttt{T\_Element}, utilisé pour représenter les fréquences des 256 caractères possibles dans un fichier texte. Ce tableau est essentiel pour la construction de l'arbre de Huffman.
+
+\begin{verbatim}
+type T_Tab is array(1..256) of T_Element;
+\end{verbatim}
+
+\subsection{Type T\_Noeud}
+Ce type définit un nœud de l'arbre de Huffman. Chaque nœud contient un caractère \texttt{Cle}, une valeur \texttt{Valeur} qui est la somme des fréquences des nœuds enfants, ainsi que deux pointeurs vers les sous-arbres gauche et droit.
+
+\begin{verbatim}
+type T_Noeud is
+    record
+        Cle : Character;
+        Valeur : Integer;
+        Sous_Arbre_Gauche : T_ABR;
+        Sous_Arbre_Droit : T_ABR;
+    end record;
+\end{verbatim}
+
+\subsection{Type T\_ABR}
+Ce type est un pointeur qui permet de manipuler dynamiquement les nœuds de l'arbre binaire. Il est utilisé pour accéder aux nœuds de l'arbre de Huffman.
+
+\begin{verbatim}
+type T_ABR is access T_Noeud;
+\end{verbatim}
+
+\subsection{Type T\_Couple}
+Ce type définit une paire de valeurs : une chaîne de caractères \texttt{Cle} et une autre chaîne \texttt{Valeur} qui représente un code Huffman associé à cette clé.
+
+\begin{verbatim}
+type T_Couple is
+    record
+        Cle : Unbounded_String;
+        Valeur : Unbounded_String;
+    end record;
+\end{verbatim}
+
+\subsection{Type T\_Tab\_Octet}
+Il s'agit d'un tableau de 256 éléments de type \texttt{T\_Couple}, représentant les codes Huffman de chaque caractère.
+
+\begin{verbatim}
+type T_Tab_Octet is array(1..256) of T_Couple;
+\end{verbatim}
+
+\subsection{Type T\_Tab\_Abr}
+Il s'agit d'un tableau d'arbres binaires de Huffman (pointeurs de type \texttt{T\_ABR}), utilisés pour stocker plusieurs arbres de Huffman.
+
+\begin{verbatim}
+type T_Tab_Abr is array(1..256) of T_ABR;
+\end{verbatim}
+
+
+\section{Démarche de test}
+Pour garantir la fiabilité, plusieurs niveaux de tests ont été effectués :
+\begin{itemize}
+    \item \textbf{Tests unitaires :} Validation individuelle des modules de compression et d'arbre binaire.
+    \item \textbf{Tests d'intégration :} Vérification de la compatibilité entre les modules en compressant des fichiers variés.
+    \item \textbf{Cas limites :} Évaluation avec des fichiers contenant peu ou beaucoup de caractères uniques.
+\end{itemize}
+
+\section{Difficultés rencontrées et solutions}
+\begin{itemize}
+
+    \item \textbf{Création de l'arbre : gestion des symboles déjà traités :} 
+Une difficulté initiale concernait la répétition des symboles dans l’arbre de Huffman. Les symboles déjà traités réapparaissaient dans la structure, ce qui perturbait la construction correcte de l’arbre.
+\textbf{Solution} : Exclure explicitement les éléments déjà utilisés en les déplaçant vers la fin du tableau des fréquences, tout en réduisant la taille effective de ce tableau à chaque itération. Cela a permis de limiter les opérations uniquement aux éléments restants.
+
+    \item \textbf{Complexité de l’affichage de l’arbre :} Lors de l’implémentation pour l’option "bavard", une difficulté majeure résidait dans le respect de la forme d’affichage demandée pour représenter l’arbre de Huffman. Cette option exige une sortie détaillée et lisible montrant les étapes successives de la construction de l’arbre, ce qui s’est avéré complexe à gérer.
+\end{itemize}
+
+\section{Organisation de l'équipe}
+La répartition des tâches entre les membres de l'équipe est la suivante :
+\begin{table}[h!]
+\centering
+\begin{tabular}{|c|p{8cm}|} 
+\hline
+\textbf{Membre} & \textbf{Tâches} \\
+\hline
+Yassir Chakir & Création de l'arbre de Huffman, Chargement de l'arbre de Huffman, Encodage du texte et création du fichier compressé, Reconstruction des codes associés aux caractères à partir de la signature de l'arbre,Implémentation de la procedure d'affichage de l'arbre , Décodage du texte et création du fichier décompressé  \\
+\hline
+Sabir Anas & Calcul des fréquences d'apparition des caractères, Création du parcours infixe, Création des codes associés aux caractères, Traitement des exceptions, Récupération du parcours inxe, Récupération de la signature de l'arbre, Récupération du texte compressé à décoder \\
+\hline
+\end{tabular}
+\caption{Répartition des tâches au sein de l'équipe}
+\end{table}
+
+
+
+\section{Bilan technique et perspectives}
+Le projet a atteint ses objectifs principaux, mais des améliorations peuvent être envisagées :
+\begin{itemize}
+    \item \textbf{Optimisation de la gestion des données :} Réduction de la taille des métadonnées dans le fichier compressé.
+    \item \textbf{Performance :} Utilisation d'une structure de tas pour accélérer la construction de l'arbre.
+\end{itemize}
+
+\section{Bilan personnel}
+\subsection{Yassir Chakir}
+J'ai apprécié travailler sur ce projet qui m'a permis de renforcer mes compétences en structures de données.
+
+\subsection{Anas Sabir}
+Ce projet a été une expérience très enrichissante, en particulier dans la gestion des fichiers binaires et le travail sur des structures de données complexes, telles que les arbres.
+
+\end{document}
